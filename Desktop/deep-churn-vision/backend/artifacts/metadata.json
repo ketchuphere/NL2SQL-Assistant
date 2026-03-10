@@ -1,0 +1,29 @@
+{
+  "feature_cols": [
+    "CreditScore",
+    "Age",
+    "Tenure",
+    "Balance",
+    "NumOfProducts",
+    "HasCrCard",
+    "IsActiveMember",
+    "EstimatedSalary",
+    "Geography_Germany",
+    "Geography_Spain",
+    "Gender_Male"
+  ],
+  "accuracy": 0.714,
+  "roc_auc": 0.7415,
+  "n_iter": 22,
+  "architecture": [
+    128,
+    64,
+    32
+  ],
+  "class_names": [
+    "Stayed",
+    "Churned"
+  ],
+  "train_size": 8000,
+  "test_size": 2000
+}

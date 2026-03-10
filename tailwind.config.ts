@@ -12,9 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Syne", "sans-serif"],
-        heading: ["Syne", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ["DM Sans", "sans-serif"],
+        mono: ["Space Mono", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",

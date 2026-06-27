@@ -1,230 +1,133 @@
-# NL2SQL RAG Project
+# NL2SQL Full-Stack Project
 
-A production-grade **Natural Language to SQL** system built with a **Retrieval-Augmented Generation** architecture. Ask questions about your database in plain English — the system retrieves the relevant schema context and generates accurate, dialect-aware SQL using an LLM.
+A production-ready **Natural Language to SQL** platform with a FastAPI backend and React frontend.
 
 ```
-Natural Language Query
-       │
-       ▼
-[Retriever]  ─── Qdrant hybrid search + FlashRank reranking
-       │
-       ▼
-[Generator]  ─── GPT-4o + schema context → structured SQL via instructor
-       │
-       ▼
-[Executor]   ─── Run against MySQL / PostgreSQL / Snowflake / SQL Server
-       │
-       ▼
-[Self-Healer] ── On error, refine & retry (up to 3 attempts)
-       │
-       ▼
-  JSON Results
+┌────────────────────────────────────────────────────────┐
+│                React Frontend (port 8080)               │
+│  Schema Explorer · Chat UI · Results Table · History    │
+└────────────────────────┬───────────────────────────────┘
+                         │  /api/v1/* (proxied)
+┌────────────────────────▼───────────────────────────────┐
+│              FastAPI Backend (port 8000)                │
+│  RAG Pipeline · SQL Generator · Self-Healing Executor   │
+└──────────┬────────────────────────┬────────────────────┘
+           │                        │
+┌──────────▼──────────┐  ┌──────────▼──────────┐
+│  Qdrant (port 6333) │  │ Postgres (port 5432) │
+│  Schema vectors     │  │  Query history       │
+└─────────────────────┘  └─────────────────────┘
 ```
 
----
+## Quick Start
+
+### Option A — Docker (recommended)
+
+```bash
+# 1. Configure your target database
+cp backend/.env.example backend/.env
+# Edit backend/.env with your OPENAI_API_KEY and TARGET_DB_* values
+
+# 2. Start everything
+make docker-up
+
+# 3. Index your database schema
+make index-schema
+
+# 4. Open the app
+open http://localhost:8080
+```
+
+### Option B — Local development
+
+```bash
+# Install dependencies
+make install
+
+# Configure environment
+cp backend/.env.example backend/.env
+# Edit backend/.env
+
+# Terminal 1: start backend
+make dev-backend
+
+# Terminal 2: start frontend
+make dev-frontend
+
+# Index schema (in a 3rd terminal)
+make index-schema
+```
 
 ## Project Structure
 
 ```
-nl2sql-rag-project/
-├── app/
-│   ├── main.py                   FastAPI entry point
-│   ├── api/
-│   │   ├── rag.py                NL2SQL query endpoints
-│   │   ├── documents.py          Schema indexing & upload endpoints
-│   │   └── health.py             Health check
-│   ├── middleware/
-│   │   ├── error_handler.py      Global error handler
-│   │   ├── logger.py             Request logger
-│   │   └── rate_limiter.py       Sliding-window rate limiter
-│   ├── rag/
-│   │   ├── pipeline.py           Main RAG orchestrator
-│   │   ├── retriever.py          Schema retrieval (vector search)
-│   │   ├── generator.py          SQL generation (LLM + instructor)
-│   │   └── prompt_builder.py     Prompt construction
-│   ├── ingestion/
-│   │   ├── loader.py             Load schema / PDF / TXT
-│   │   ├── chunker.py            Split documents
-│   │   └── parser.py             Clean & enrich documents
-│   ├── embeddings/
-│   │   └── embedder.py           Dense + sparse embeddings (fastembed)
-│   ├── vectorstore/
-│   │   └── vector_db.py          Qdrant vector store operations
-│   ├── db/
-│   │   ├── postgres.py           Async SQLAlchemy engine
-│   │   └── models.py             ORM models (QueryHistory, DatabaseSource)
-│   ├── logs/
-│   │   ├── app.log               Application logs
-│   │   └── error.log             Error logs
-│   ├── config/
-│   │   └── settings.py           Pydantic settings (from .env)
-│   └── utils/
-│       ├── sql_connectors.py     Multi-dialect SQL connector
-│       └── helpers.py            Shared utilities
-├── tests/
-│   ├── test_rag.py               RAG pipeline unit tests
-│   └── test_api.py               FastAPI endpoint tests
-├── docker/
-│   ├── Dockerfile                Multi-stage Docker image
-│   └── docker-compose.yml        Full stack (API + Qdrant + Postgres)
-├── .github/
-│   └── workflows/
-│       └── ci.yml                GitHub Actions CI pipeline
-├── .env                          Environment variables (do not commit)
-├── requirements.txt              Python dependencies
-├── README.md                     This file
-└── Makefile                      Dev commands
+nl2sql-fullstack/
+├── frontend/                   React + Vite + TypeScript + shadcn/ui
+│   ├── src/
+│   │   ├── lib/api.ts           API client (wired to FastAPI)
+│   │   ├── store/assistant.ts   Zustand state (with session tracking)
+│   │   └── components/
+│   │       └── assistant/
+│   │           ├── ChatView.tsx
+│   │           ├── SchemaExplorer.tsx  (live schema from backend)
+│   │           ├── DbStatus.tsx        (live DB status badge)
+│   │           ├── Sidebar.tsx
+│   │           ├── MessageBubble.tsx
+│   │           ├── ResultsTable.tsx
+│   │           ├── ResultChart.tsx
+│   │           └── SqlBlock.tsx
+│   └── vite.config.ts           Proxy: /api/v1/* → localhost:8000
+│
+├── backend/                    FastAPI + Python
+│   ├── app/
+│   │   ├── main.py              FastAPI entry point
+│   │   ├── api/
+│   │   │   ├── rag.py           POST /rag/query, /rag/generate
+│   │   │   ├── documents.py     POST /documents/index, GET /documents/schema
+│   │   │   └── health.py        GET /health
+│   │   ├── rag/
+│   │   │   ├── pipeline.py      RAG orchestrator
+│   │   │   ├── retriever.py     Vector search + query decomposition
+│   │   │   ├── generator.py     GPT-4o SQL generation (instructor)
+│   │   │   └── prompt_builder.py
+│   │   ├── ingestion/           Loader · Chunker · Parser
+│   │   ├── embeddings/          fastembed (dense + sparse)
+│   │   ├── vectorstore/         Qdrant + FlashRank reranking
+│   │   ├── db/                  SQLAlchemy async ORM
+│   │   ├── middleware/          Error handler · Logger · Rate limiter
+│   │   ├── utils/
+│   │   │   ├── sql_connectors.py  MySQL · PostgreSQL · Snowflake · SQL Server
+│   │   │   └── helpers.py
+│   │   └── config/settings.py   Pydantic settings
+│   ├── tests/
+│   ├── docker/
+│   └── requirements.txt
+│
+├── docker-compose.yml           Full stack: backend + frontend + qdrant + postgres
+└── Makefile                     Dev commands
 ```
 
----
+## Key API Endpoints
 
-## Quick Start
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/rag/query` | NL → SQL → Execute → Results |
+| `POST` | `/api/v1/rag/generate` | NL → SQL only (dry-run) |
+| `GET`  | `/api/v1/rag/history` | Paginated query history |
+| `POST` | `/api/v1/documents/index` | Index a database schema |
+| `GET`  | `/api/v1/documents/schema` | Get full schema (used by frontend) |
+| `GET`  | `/api/v1/documents/status` | Qdrant collection stats |
+| `GET`  | `/health` | Liveness check |
 
-### 1. Clone and install
+Full interactive docs: **http://localhost:8000/docs**
 
-```bash
-git clone https://github.com/your-org/nl2sql-rag-project.git
-cd nl2sql-rag-project
-make install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env .env.local   # edit with your actual values
-```
-
-Key variables to set:
+## Environment Variables (backend/.env)
 
 | Variable | Description |
 |----------|-------------|
 | `OPENAI_API_KEY` | Your OpenAI API key |
-| `TARGET_DB_TYPE` | `mysql` \| `postgresql` \| `snowflake` \| `sqlserver` |
-| `TARGET_DB_HOST` | Target database host |
-| `TARGET_DB_USER` | Target database username |
-| `TARGET_DB_PASSWORD` | Target database password |
-| `TARGET_DB_NAME` | Database name to query |
-
-### 3. Start infrastructure
-
-```bash
-make docker-up
-# Starts: Qdrant (port 6333) + Postgres (port 5432)
-```
-
-### 4. Index your database schema
-
-```bash
-make index-schema
-# OR via API:
-curl -X POST http://localhost:8000/api/v1/documents/index \
-  -H "Content-Type: application/json" \
-  -d '{"db_type":"postgresql","host":"localhost","port":5432,
-       "username":"user","password":"pass","database":"mydb"}'
-```
-
-### 5. Run the API
-
-```bash
-make dev   # hot-reload for development
-make run   # production mode
-```
-
-API docs: **http://localhost:8000/docs**
-
----
-
-## Usage Examples
-
-### Query in natural language
-
-```bash
-curl -X POST http://localhost:8000/api/v1/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Show me the top 10 customers by total revenue last quarter",
-    "execute": true,
-    "max_rows": 100
-  }'
-```
-
-Response:
-```json
-{
-  "generated_sql": "SELECT c.name, SUM(o.amount) AS total_revenue\nFROM \"public\".\"customers\" c\nJOIN \"public\".\"orders\" o ON c.customer_id = o.customer_id\nWHERE o.created_at >= date_trunc('quarter', now() - interval '3 months')\nGROUP BY c.name\nORDER BY total_revenue DESC\nLIMIT 10",
-  "rows": [...],
-  "row_count": 10,
-  "success": true,
-  "latency": {"retrieval_ms": 52.1, "generation_ms": 820.3, "execution_ms": 28.7, "total_ms": 901.1}
-}
-```
-
-### Multi-turn conversation
-
-```bash
-# First turn
-curl -X POST http://localhost:8000/api/v1/rag/query \
-  -d '{"question":"How many orders were placed this month?","session_id":"session-abc"}'
-
-# Follow-up (context is preserved)
-curl -X POST http://localhost:8000/api/v1/rag/query \
-  -d '{"question":"Break that down by product category","session_id":"session-abc"}'
-```
-
-### Dry-run (generate SQL without executing)
-
-```bash
-curl -X POST http://localhost:8000/api/v1/rag/generate \
-  -d '{"question":"What is the average order value by region?"}'
-```
-
----
-
-## Architecture Highlights
-
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **API Framework** | FastAPI | Async REST API with OpenAPI docs |
-| **LLM** | GPT-4o via OpenAI | SQL generation |
-| **Structured Output** | `instructor` | Pydantic-typed LLM responses with retry |
-| **Vector Store** | Qdrant | Hybrid (dense + sparse) schema retrieval |
-| **Embeddings** | fastembed + all-MiniLM-L6-v2 | Dense vector embeddings |
-| **Sparse Embeddings** | SPLADE (fastembed) | BM25-style sparse retrieval |
-| **Reranker** | FlashRank (ms-marco) | Cross-encoder result reranking |
-| **Metadata Store** | PostgreSQL + SQLAlchemy | Query history, session tracking |
-| **Self-Healing** | Multi-attempt retry | Fixes SQL errors autonomously |
-| **Supported DBs** | MySQL, PostgreSQL, Snowflake, SQL Server | Target database connectors |
-
----
-
-## Running Tests
-
-```bash
-make test          # all tests
-make test-cov      # with HTML coverage report
-```
-
----
-
-## CI/CD
-
-GitHub Actions runs on every push to `main` / `develop`:
-1. **Lint** — ruff code style check
-2. **Tests** — pytest with Postgres + Qdrant services
-3. **Docker build** — verifies the image builds successfully
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Run tests: `make test`
-4. Format: `make format`
-5. Open a pull request
-
----
-
-## License
-
-MIT
+| `TARGET_DB_TYPE` | `postgresql` \| `mysql` \| `snowflake` \| `sqlserver` |
+| `TARGET_DB_HOST` | Host of the database you want to query |
+| `TARGET_DB_NAME` | Database name |
+| `TARGET_DB_USER` | Username |
+| `TARGET_DB_PASSWORD` | Password |

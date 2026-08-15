@@ -1,0 +1,83 @@
+version: "3.9"
+
+# ── Networks ───────────────────────────────────────────────────────────────────
+networks:
+  nl2sql-net:
+    driver: bridge
+
+# ── Volumes ────────────────────────────────────────────────────────────────────
+volumes:
+  qdrant_storage:
+  postgres_data:
+
+# ── Services ───────────────────────────────────────────────────────────────────
+services:
+
+  # ── FastAPI Application ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nl2sql-api
+    restart: unless-stopped
+    env_file: ../.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../app/logs:/app/app/logs
+    networks:
+      - nl2sql-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Qdrant Vector Database ───────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: nl2sql-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      - nl2sql-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Postgres Metadata Store ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nl2sql-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nl2sql_rag}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nl2sql-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag_user} -d ${POSTGRES_DB:-nl2sql_rag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

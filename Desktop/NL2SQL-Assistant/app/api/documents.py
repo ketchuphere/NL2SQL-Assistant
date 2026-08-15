@@ -171,7 +171,7 @@ async def get_schema():
 @router.delete("/reset", summary="Reset vector store collection")
 async def reset_collection(vdb: Annotated[VectorDB, Depends(get_vector_db)]):
     """Drop and recreate the Qdrant collection.
-    ⚠️  This deletes all indexed schemas."""
+         This deletes all indexed schemas."""
     try:
         vdb.delete_collection()
         return {"message": f"Collection '{vdb.collection_name}' has been reset."}
